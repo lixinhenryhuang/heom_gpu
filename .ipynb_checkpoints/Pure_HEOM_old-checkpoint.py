@@ -15,7 +15,6 @@ from math import pi
 from scipy.linalg import expm
 from parameters.dimer import H_sys
 import time
-import cupy as cp
 
 lvl = 15
 Lambda = 37 # in invcm
@@ -39,10 +38,10 @@ assert init_site <= sites
 #################### Import Hamiltonian, set up initial state #################
 print('Initializing...')
 # ground state is indexed 0
-H_sys_int = cp.asarray(H_sys) - cp.identity(sites) * ctrfreq
-H = cp.zeros((dim, dim), dtype=complex)
+H_sys_int = H_sys - np.identity(sites) * ctrfreq
+H = np.zeros((dim, dim), dtype=complex)
 H[1:, 1:] = H_sys_int
-rho_init = cp.zeros((dim, dim), dtype=complex)
+rho_init = np.zeros((dim, dim), dtype=complex)
 #rho_init[init_site, init_site] = 1
 
 rho_init[0,0] = 0
@@ -50,7 +49,7 @@ rho_init[1,0] = 1
 rho_init[0,1] = 0
 rho_init[1,1] = 0
 
-assert cp.shape(H) == (dim, dim)
+assert np.shape(H) == (dim, dim)
 ########################### HEOM Indexing #####################################
 @lru_cache(maxsize=9999)
 def construct_HEOM_lvl_lst(fix_lvl, sites):
@@ -114,25 +113,25 @@ def getrho(state, lvlvec):
     ''' Returns the auxiliary rho with index lvlvec 
     from vectorized HEOM state. '''
     temp = HEOM_lvl_ind[tuple(lvlvec)]
-    return cp.reshape(state[temp*rhodim: (temp+1)*rhodim], (dim,dim))
+    return np.reshape(state[temp*rhodim: (temp+1)*rhodim], (dim,dim))
 
 def addrho(state, lvlvec, rho):
     ''' Add rho to the auxiliary rho indexed lvlvec.
     rho is in matrix form with dimension (dim * dim)'''
-    temp = cp.reshape(rho, -1)
+    temp = np.reshape(rho, -1)
     temp2 = HEOM_lvl_ind[tuple(lvlvec)]
     state[temp2*rhodim: (temp2+1)*rhodim] += temp
     return None
 
 def initHEOMvec(rhoinit):
     ''' Returns the vectorized HEOM state (with all the auxiliary rhos) '''
-    rtn = cp.zeros(HEOM_vec_len, dtype=complex)
+    rtn = np.zeros(HEOM_vec_len, dtype=complex)
     addrho(rtn, zerovec, rho_init)
     return rtn
 ################################ Useful functions #############################
 def projection(site):
     '''returns the projection operator to single exciton state at site Site'''
-    temp = cp.zeros([dim, dim], dtype=complex)
+    temp = np.zeros([dim, dim], dtype=complex)
     temp[site, site] = 1
     return temp
 
@@ -141,14 +140,13 @@ for i in range(sites):
     projs.append(projection(i+1))
 
 def commutator(A, B):
-    return cp.matmul(A, B) - cp.matmul(B, A)
+    return matmul(A, B) - matmul(B, A)
 def anticommutator(A, B):
-    return cp.matmul(A, B) + cp.matmul(B, A)
+    return matmul(A, B) + matmul(B, A)
 
 ######################### Time derivative function ############################
 def timederiv(t, state):
-    rtnstate = cp.zeros(HEOM_vec_len, dtype=complex)
-    state = cp.asarray(state)
+    rtnstate = np.zeros(HEOM_vec_len, dtype=complex)
     for v in HEOM_lvl_vecs:
         temp = -1j * commutator(H, getrho(state, v))
         temp -= sumHEOMsitelvl(v) * gamma * getrho(state, v)
@@ -163,7 +161,6 @@ def timederiv(t, state):
             if highervec != None:
                 temp += commutator(projs[s], getrho(state, highervec))
         addrho(rtnstate, v, temp)
-    rtnstate = cp.asnumpy(rtnstate)
     return rtnstate
 
 ########################## solve_dynamics Methods #############################
@@ -171,12 +168,10 @@ def solve_dynamics():
     starttime = time.time()
     print('solving ODE...')
     initstate = initHEOMvec(rho_init)
-    initstate = cp.asnumpy(initstate)
     tpoints = np.arange(0, tf_cm, timestep_cm)
     solution = solve_ivp(timederiv, (0, tf_cm), initstate, t_eval=tpoints)
     rhos = solution.y[HEOM_phys_ind*rhodim:(HEOM_phys_ind+1)*rhodim, :]
     tpoints = solution.t * cm_to_fs
-    
     print('solve ODE time:', time.time()-starttime, 's')
     return tpoints, rhos
 def solve_dynamics_pw():
@@ -251,33 +246,5 @@ plt.plot(tpoints, np.imag(analytical_rho10))
 
 
 
-# TPB = 16
 
-#@cuda.jit
-#def matmul(A, B, C):
-    #sA = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
-   # sB = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
 
-    #x, y = cuda.grid(2)
-
-    #tx = cuda.threadIdx.x
-   #ty = cuda.threadIdx.y
-    #bpg = cuda.gridDim.x  
-
-    #tmp = float32(0.)
-    #for i in range(bpg):
-        #sA[ty, tx] = 0
-        #sB[ty, tx] = 0
-        #if y < A.shape[0] and (tx + i * TPB) < A.shape[1]:
-            #sA[ty, tx] = A[y, tx + i * TPB]
-        #if x < B.shape[1] and (ty + i * TPB) < B.shape[0]:
-            #sB[ty, tx] = B[ty + i * TPB, x]
-
-        #cuda.syncthreads()
-
-        #for j in range(TPB):
-            #tmp += sA[ty, j] * sB[j, tx]
-
-        #cuda.syncthreads()
-    #if y < C.shape[0] and x < C.shape[1]:
-        #C[y, x] = tmp
