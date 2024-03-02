@@ -15,6 +15,7 @@ from math import pi
 from scipy.linalg import expm
 from parameters.dimer import H_sys
 import time
+import cupy as cp
 
 lvl = 15
 Lambda = 37 # in invcm
@@ -42,12 +43,14 @@ H_sys_int = H_sys - np.identity(sites) * ctrfreq
 H = np.zeros((dim, dim), dtype=complex)
 H[1:, 1:] = H_sys_int
 rho_init = np.zeros((dim, dim), dtype=complex)
-#rho_init[init_site, init_site] = 1
+rho_init[init_site, init_site] = 1
 
-rho_init[0,0] = 0
-rho_init[1,0] = 1
-rho_init[0,1] = 0
-rho_init[1,1] = 0
+# +
+#rho_init[0,0] = 1
+#rho_init[1,0] = 0
+#rho_init[0,1] = 0
+#rho_init[1,1] = 0
+# -
 
 assert np.shape(H) == (dim, dim)
 ########################### HEOM Indexing #####################################
@@ -146,7 +149,9 @@ def anticommutator(A, B):
 
 ######################### Time derivative function ############################
 def timederiv(t, state):
+    starttime = time.time()
     rtnstate = np.zeros(HEOM_vec_len, dtype=complex)
+    print('time b4 for loop:', time.time()-starttime, 's')
     for v in HEOM_lvl_vecs:
         temp = -1j * commutator(H, getrho(state, v))
         temp -= sumHEOMsitelvl(v) * gamma * getrho(state, v)
@@ -161,6 +166,7 @@ def timederiv(t, state):
             if highervec != None:
                 temp += commutator(projs[s], getrho(state, highervec))
         addrho(rtnstate, v, temp)
+        print('time after for loop:', time.time()-starttime, 's')
     return rtnstate
 
 ########################## solve_dynamics Methods #############################
@@ -232,7 +238,7 @@ def plotrho(tpoints, rhopoints, row, col, form=None, part='R'):
 # plotrho(tpoints, rhos, 7, 7)
 # plt.legend(['1','2','3','4','5','6','7'])
 
-plt.plot(tpoints, np.imag(rhos[dim*1+0,:]))
+plt.plot(tpoints, np.real(rhos[dim*1+1,:]))
 
 
 ############################# monomer analytic ###############################
@@ -244,7 +250,19 @@ def g(t):
 analytical_rho10 = np.array([e**(-g(t)) for t in tpoints])
 plt.plot(tpoints, np.imag(analytical_rho10))
 
+starttime = time.time()
+m1 = np.random.rand(5000,5000)
+m2 = np.random.rand(5000,5000)
+m3 = np.matmul(m1,m2)
+print(time.time()-starttime)
 
+starttime = time.time()
+m1 = np.random.rand(5000,5000)
+m2 = np.random.rand(5000,5000)
+m1 = cp.asarray(m1)
+m2 = cp.asarray(m2)
+m3 = 3*cp.matmul(m1,m2)
+print(time.time()-starttime)
 
 
 

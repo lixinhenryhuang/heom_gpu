@@ -43,12 +43,14 @@ H_sys_int = cp.asarray(H_sys) - cp.identity(sites) * ctrfreq
 H = cp.zeros((dim, dim), dtype=complex)
 H[1:, 1:] = H_sys_int
 rho_init = cp.zeros((dim, dim), dtype=complex)
-#rho_init[init_site, init_site] = 1
+rho_init[init_site, init_site] = 1
 
-rho_init[0,0] = 0
-rho_init[1,0] = 1
-rho_init[0,1] = 0
-rho_init[1,1] = 0
+# +
+#rho_init[0,0] = 1
+#rho_init[1,0] = 0
+#rho_init[0,1] = 0
+#rho_init[1,1] = 0
+# -
 
 assert cp.shape(H) == (dim, dim)
 ########################### HEOM Indexing #####################################
@@ -147,6 +149,7 @@ def anticommutator(A, B):
 
 ######################### Time derivative function ############################
 def timederiv(t, state):
+    starttime = time.time()
     rtnstate = cp.zeros(HEOM_vec_len, dtype=complex)
     state = cp.asarray(state)
     for v in HEOM_lvl_vecs:
@@ -160,6 +163,7 @@ def timederiv(t, state):
                 temp -= HEOMsitelvl(v,s) * 2 * Lambda * kT_cm * temp2
                 temp2 = anticommutator(projs[s], getrho(state, lowervec))
                 temp += HEOMsitelvl(v,s) * 1j * Lambda * gamma * temp2
+                print(HEOMsitelvl(v,s))
             if highervec != None:
                 temp += commutator(projs[s], getrho(state, highervec))
         addrho(rtnstate, v, temp)
@@ -173,7 +177,9 @@ def solve_dynamics():
     initstate = initHEOMvec(rho_init)
     initstate = cp.asnumpy(initstate)
     tpoints = np.arange(0, tf_cm, timestep_cm)
+    print('time b4 ode:', time.time()-starttime, 's')
     solution = solve_ivp(timederiv, (0, tf_cm), initstate, t_eval=tpoints)
+    print('time after ode:', time.time()-starttime, 's')
     rhos = solution.y[HEOM_phys_ind*rhodim:(HEOM_phys_ind+1)*rhodim, :]
     tpoints = solution.t * cm_to_fs
     
@@ -237,7 +243,7 @@ def plotrho(tpoints, rhopoints, row, col, form=None, part='R'):
 # plotrho(tpoints, rhos, 7, 7)
 # plt.legend(['1','2','3','4','5','6','7'])
 
-plt.plot(tpoints, np.imag(rhos[dim*1+0,:]))
+plt.plot(tpoints, np.real(rhos[dim*1+1,:]))
 
 
 ############################# monomer analytic ###############################
